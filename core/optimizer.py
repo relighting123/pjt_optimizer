@@ -23,7 +23,7 @@ def get_changeover_time(p_old, o_old, p_new, o_new):
         
     return 0
 
-def solve_production_allocation(demands=None, eqp_models=None, proc_config=None, avail_time=None, opers_list=None, wip=None):
+def solve_production_allocation(demands=None, eqp_models=None, proc_config=None, avail_time=None, opers_list=None, wip=None, eqp_wip=None, tools=None):
     # 인자가 제공되지 않으면 data_config의 기본값 사용
     demands = demands or data_config.DEMAND
     eqp_models = eqp_models or data_config.EQUIPMENT_MODELS
@@ -31,6 +31,8 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
     avail_time = avail_time or data_config.AVAILABLE_TIME
     opers_list = opers_list or data_config.OPERATIONS
     wip = wip or data_config.WIP
+    eqp_wip = eqp_wip or {}
+    tools = tools or {}
     
     # 1. 문제 정의
     prob = LpProblem("Production_Line_Balancing", LpMinimize)
@@ -90,14 +92,33 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
                 prob += (lpSum([qty_vars[p, curr_op, u] for u in curr_units_p]) <= 
                          wip_val + lpSum([qty_vars[p, prev_op, u] for u in prev_units_p]))
 
+    # D. 툴 제약 (Tool Constraint)
+    # 특정 (제품, 공정)에 할당된 장비 대수는 사용 가능한 툴 수량을 초과할 수 없음
+    for (p, o) in [(prod, oper) for prod in demands for oper in opers_list]:
+        tool_qty = tools.get((p, o), 99) # 기본값 99 (제한 없음 수준)
+        # 해당 (p, o)에 할당된 장비 가변수(assign_vars)의 합계가 툴 수량 이하여야 함
+        relevant_assigns = [assign_vars[prod, oper, u] for (prod, oper, u) in valid_combinations if prod == p and oper == o]
+        if relevant_assigns:
+            prob += lpSum(relevant_assigns) <= tool_qty
+
+    # E. 장비 가용 시간 제약 (Capacity + EQP WIP)
     for u in units:
+        # 해당 장비의 현재 작업 종료 시각(End_Time_Offset)을 고려하여 가용 시간 차감
+        occupied_sec = 0
+        if u in eqp_wip:
+            occupied_sec = eqp_wip[u].get('End_Time_Offset', 0)
+        
+        effective_avail_time = avail_time - occupied_sec
+        
         assigned_tasks = []
         for (p, o, m), t in proc_config.items():
             if m in eqp_models and u in eqp_models[m]:
                 assigned_tasks.append((p, o, t))
+        
         if assigned_tasks:
             total_unit_time = lpSum([qty_vars[p, o, u] * t for (p, o, t) in assigned_tasks])
-            prob += total_unit_time <= avail_time
+            # (이번에 할당된 작업 시간) <= (실제 사용 가능한 남은 시간)
+            prob += total_unit_time <= effective_avail_time
 
     # 5. 최적화 실행
     status = prob.solve(PULP_CBC_CMD(msg=0))
@@ -107,7 +128,19 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
     if LpStatus[status] in ['Optimal', 'Not Solved']:
         results = []
         now = datetime.now()
-        unit_last_state = {u: {'prod': None, 'oper': None, 'time': now} for u in units}
+        
+        # 장비별 마지막 상태 초기화 (EQP WIP 반영)
+        unit_last_state = {}
+        for u in units:
+            if u in eqp_wip:
+                info = eqp_wip[u]
+                unit_last_state[u] = {
+                    'prod': info['Product'], 
+                    'oper': info['Operation'], 
+                    'time': now + timedelta(seconds=info['End_Time_Offset'])
+                }
+            else:
+                unit_last_state[u] = {'prod': None, 'oper': None, 'time': now}
         
         for (p, o, u) in sorted(valid_combinations, key=lambda x: (x[2], x[0])):
             q = value(qty_vars[p, o, u])

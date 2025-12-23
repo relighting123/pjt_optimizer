@@ -11,7 +11,7 @@ def main():
     
     # 2. 데이터 가져오기 (local_test면 샘플, 그 외엔 DB)
     print(f"[1/3] Fetching data (Mode: {mgr.mode})...")
-    demands, eqp_models, proc_config, wip = mgr.fetch_inputs()
+    demands, eqp_models, proc_config, wip, eqp_wip, tools = mgr.fetch_inputs()
     
     if demands is None:
         print("!!! Error: Failed to fetch inputs.")
@@ -26,7 +26,9 @@ def main():
         eqp_models=eqp_models,
         proc_config=proc_config,
         avail_time=avail_time,
-        wip=wip
+        wip=wip,
+        eqp_wip=eqp_wip,
+        tools=tools
     )
     
     if df_results is not None:

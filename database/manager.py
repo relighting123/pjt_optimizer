@@ -39,7 +39,9 @@ class OracleManager:
                 data_config.DEMAND, 
                 data_config.EQUIPMENT_MODELS, 
                 data_config.PROCESS_CONFIG, 
-                data_config.WIP
+                data_config.WIP,
+                data_config.EQP_WIP,
+                data_config.TOOLS
             )
 
         try:
@@ -60,12 +62,36 @@ class OracleManager:
                 proc_df = pd.read_sql(proc_query, conn)
                 process_config = {(row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID']): row['CYCLE_TIME'] for _, row in proc_df.iterrows()}
 
-                # 4. 재공량
+                # 4. 재공량 (Input WIP)
                 wip_query = "SELECT PRODUCT_ID, OPER_ID, WIP_QTY FROM TB_WIP_STATUS"
                 wip_df = pd.read_sql(wip_query, conn)
                 wip = {(row['PRODUCT_ID'], row['OPER_ID']): row['WIP_QTY'] for _, row in wip_df.iterrows()}
 
-                return demands, equipment_models, process_config, wip
+                # 5. 장비별 현재 작업 재공 (Equipment WIP)
+                # 현재 작업 중인 제품, 공정, 종료 예정 시각
+                eqw_query = "SELECT EQP_ID, PROD_ID, OPER_ID, END_TIME FROM TB_EQP_WIP"
+                eqw_df = pd.read_sql(eqw_query, conn)
+                # 간단화를 위해 END_TIME과 현재 시각의 차이를 초 단위로 계산하여 저장한다고 가정
+                eqp_wip = {}
+                now = datetime.now()
+                for _, row in eqw_df.iterrows():
+                    offset = (row['END_TIME'] - now).total_seconds()
+                    eqp_wip[row['EQP_ID']] = {
+                        'Product': row['PROD_ID'],
+                        'Operation': row['OPER_ID'],
+                        'End_Time_Offset': max(0, offset)
+                    }
+
+                # 6. 연간/공정별 툴 수량 (Tool Constraints)
+                tool_query = "SELECT PRODUCT_ID, OPER_ID, TOOL_QTY FROM TB_TOOL_MASTER"
+                tool_df = pd.read_sql(tool_query, conn)
+                tools = {(row['PRODUCT_ID'], row['OPER_ID']): row['TOOL_QTY'] for _, row in tool_df.iterrows()}
+
+                return demands, equipment_models, process_config, wip, eqp_wip, tools
+
+        except Exception as e:
+            print(f"Failed to fetch inputs from Oracle ({self.mode}): {e}")
+            return None, None, None, None, None, None
 
         except Exception as e:
             print(f"Failed to fetch inputs from Oracle ({self.mode}): {e}")

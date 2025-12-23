@@ -44,7 +44,7 @@ class JobManager:
             
             # 지정된 모드로 매니저 초기화
             mgr = OracleManager(mode=mode)
-            demands, eqp_models, proc_config, wip = mgr.fetch_inputs()
+            demands, eqp_models, proc_config, wip, eqp_wip, tools = mgr.fetch_inputs()
             
             if demands is None:
                 self.jobs[job_id]["status"] = "FAILED"
@@ -56,7 +56,9 @@ class JobManager:
                 eqp_models=eqp_models,
                 proc_config=proc_config,
                 avail_time=data_config.AVAILABLE_TIME,
-                wip=wip
+                wip=wip,
+                eqp_wip=eqp_wip,
+                tools=tools
             )
             
             if df_results is not None:

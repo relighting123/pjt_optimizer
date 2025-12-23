@@ -37,37 +37,44 @@ with st.sidebar:
         st.json(data_config.DEMAND)
         st.subheader("WIP (Sample)")
         st.json({str(k): v for k, v in data_config.WIP.items()})
+        st.subheader("Eqp WIP (Sample)")
+        st.json(data_config.EQP_WIP)
+        st.subheader("Tools (Sample)")
+        st.json({str(k): v for k, v in data_config.TOOLS.items()})
         
         active_demand = data_config.DEMAND
         active_eqp = data_config.EQUIPMENT_MODELS
         active_proc = data_config.PROCESS_CONFIG
         active_avail = data_config.AVAILABLE_TIME
         active_wip = data_config.WIP
+        active_eqp_wip = data_config.EQP_WIP
+        active_tools = data_config.TOOLS
     else:
         # DB에서 데이터 가져오기 시도
         from database.manager import OracleManager
         # 현재 선택된 모드 혹은 config의 모드 사용
         mgr = OracleManager()
-        d, e, p, w = mgr.fetch_inputs()
+        d, e, p, w, ew, t = mgr.fetch_inputs()
         if d:
             st.success("Successfully loaded data from Oracle!")
             st.subheader("Demands (Oracle)")
             st.json(d)
             st.subheader("WIP (Oracle)")
             st.json({str(k): v for k, v in w.items()})
-            active_demand, active_eqp, active_proc, active_wip = d, e, p, w
+            active_demand, active_eqp, active_proc, active_wip, active_eqp_wip, active_tools = d, e, p, w, ew, t
             active_avail = data_config.AVAILABLE_TIME
         else:
             st.error("Failed to load Oracle data. Using sample data instead.")
             active_demand, active_eqp, active_proc = data_config.DEMAND, data_config.EQUIPMENT_MODELS, data_config.PROCESS_CONFIG
+            active_wip, active_eqp_wip, active_tools = data_config.WIP, data_config.EQP_WIP, data_config.TOOLS
             active_avail = data_config.AVAILABLE_TIME
-            active_wip = data_config.WIP
 
 # 2. 최적화 실행
 if st.button("🚀 Run Optimizer"):
     with st.spinner("Calculating optimal schedule..."):
         df_results, bottleneck_time, df_unmet = solve_production_allocation(
-            active_demand, active_eqp, active_proc, active_avail, wip=active_wip
+            active_demand, active_eqp, active_proc, active_avail, 
+            wip=active_wip, eqp_wip=active_eqp_wip, tools=active_tools
         )
     
     if df_results is not None:
