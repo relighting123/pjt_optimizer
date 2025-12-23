@@ -23,13 +23,14 @@ def get_changeover_time(p_old, o_old, p_new, o_new):
         
     return 0
 
-def solve_production_allocation(demands=None, eqp_models=None, proc_config=None, avail_time=None, opers_list=None):
+def solve_production_allocation(demands=None, eqp_models=None, proc_config=None, avail_time=None, opers_list=None, wip=None):
     # 인자가 제공되지 않으면 data_config의 기본값 사용
     demands = demands or data_config.DEMAND
     eqp_models = eqp_models or data_config.EQUIPMENT_MODELS
     proc_config = proc_config or data_config.PROCESS_CONFIG
     avail_time = avail_time or data_config.AVAILABLE_TIME
     opers_list = opers_list or data_config.OPERATIONS
+    wip = wip or data_config.WIP
     
     # 1. 문제 정의
     prob = LpProblem("Production_Line_Balancing", LpMinimize)
@@ -58,18 +59,27 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
     for (p, o, u) in valid_combinations:
         prob += qty_vars[p, o, u] <= 100000 * assign_vars[p, o, u]
     
+    # B. 수요 충족 제약 (마지막 공정 생산량 + 마지막 공정 재공량 + 미충족량 >= 수요)
     last_oper = opers_list[-1]
     for p, demand in demands.items():
         relevant_units = [u for (prod, oper, u) in qty_vars if prod == p and oper == last_oper]
-        prob += lpSum([qty_vars[p, last_oper, u] for u in relevant_units]) + unmet_vars[p, last_oper] >= demand
+        wip_val = wip.get((p, last_oper), 0)
+        prob += lpSum([qty_vars[p, last_oper, u] for u in relevant_units]) + wip_val + unmet_vars[p, last_oper] >= demand
 
+    # C. 공정 수순 흐름 제약 (Flow Conservation + WIP)
+    # 현재 공정 생산량 + 현재 공정 재공량 >= 다음 공정 생산량
     for p in demands:
         for i in range(len(opers_list) - 1):
             curr_op = opers_list[i]
             next_op = opers_list[i+1]
+            
             curr_units = [u for (prod, oper, u) in qty_vars if prod == p and oper == curr_op]
             next_units = [u for (prod, oper, u) in qty_vars if prod == p and oper == next_op]
-            prob += lpSum([qty_vars[p, curr_op, u] for u in curr_units]) >= lpSum([qty_vars[p, next_op, u] for u in next_units])
+            
+            wip_val = wip.get((p, curr_op), 0)
+            
+            # (현재 공정 생산량 합 + 현재 공정 재공량) >= 다음 공정 생산량 합
+            prob += lpSum([qty_vars[p, curr_op, u] for u in curr_units]) + wip_val >= lpSum([qty_vars[p, next_op, u] for u in next_units])
 
     for u in units:
         assigned_tasks = []

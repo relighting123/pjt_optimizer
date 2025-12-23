@@ -19,6 +19,9 @@ def main():
         demands = data_config.DEMAND
         eqp_models = data_config.EQUIPMENT_MODELS
         proc_config = data_config.PROCESS_CONFIG
+        wip = data_config.WIP
+    else:
+        wip = data_config.WIP
     
     # 3. 최적화 실행
     print("[2/3] Solving optimization problem...")
@@ -26,7 +29,8 @@ def main():
         demands=demands,
         eqp_models=eqp_models,
         proc_config=proc_config,
-        avail_time=data_config.AVAILABLE_TIME
+        avail_time=data_config.AVAILABLE_TIME,
+        wip=wip
     )
     
     if df_results is not None:

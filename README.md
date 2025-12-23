@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Production Allocation & Balancer
 
 이 프로젝트는 혼합 정수 선형 계획법(MILP)을 사용하여 장비별 생산 할당을 최적화하고, 간트 차트를 통해 타임라인을 시각화하며, Oracle DB 및 API 연동을 통해 자동화를 지원하는 시스템입니다.
@@ -88,3 +89,6 @@ python api.py
 ```powershell
 python main.py
 ```
+=======
+# pjt_optimizer
+>>>>>>> 0a0e77ced10f5410259cd6658cbfdc81dbd548a0

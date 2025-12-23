@@ -35,31 +35,38 @@ with st.sidebar:
     if not use_db_data:
         st.subheader("Demands (Sample)")
         st.json(data_config.DEMAND)
+        st.subheader("WIP (Sample)")
+        st.json({str(k): v for k, v in data_config.WIP.items()})
+        
         active_demand = data_config.DEMAND
         active_eqp = data_config.EQUIPMENT_MODELS
         active_proc = data_config.PROCESS_CONFIG
         active_avail = data_config.AVAILABLE_TIME
+        active_wip = data_config.WIP
     else:
         # DB에서 데이터 가져오기 시도
         from database.manager import OracleManager
         mgr = OracleManager(db_defaults['user'], db_defaults['password'], db_defaults['dsn'])
+        # 쿼리 수정 후 가져올 수 있도록 구조 유지 (wip는 일단 빈 dict나 샘플 유지)
         d, e, p = mgr.fetch_inputs()
         if d:
             st.success("Successfully loaded data from Oracle!")
             st.subheader("Demands (Oracle)")
             st.json(d)
             active_demand, active_eqp, active_proc = d, e, p
-            active_avail = data_config.AVAILABLE_TIME # 가용 시간은 일단 유지
+            active_avail = data_config.AVAILABLE_TIME
+            active_wip = data_config.WIP # 실 DB 연동시 mgr.fetch_wip() 등으로 확장 가능
         else:
             st.error("Failed to load Oracle data. Using sample data instead.")
             active_demand, active_eqp, active_proc = data_config.DEMAND, data_config.EQUIPMENT_MODELS, data_config.PROCESS_CONFIG
             active_avail = data_config.AVAILABLE_TIME
+            active_wip = data_config.WIP
 
 # 2. 최적화 실행
 if st.button("🚀 Run Optimizer"):
     with st.spinner("Calculating optimal schedule..."):
         df_results, bottleneck_time, df_unmet = solve_production_allocation(
-            active_demand, active_eqp, active_proc, active_avail
+            active_demand, active_eqp, active_proc, active_avail, wip=active_wip
         )
     
     if df_results is not None:
