@@ -92,23 +92,35 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
                 prob += (lpSum([qty_vars[p, curr_op, u] for u in curr_units_p]) <= 
                          wip_val + lpSum([qty_vars[p, prev_op, u] for u in prev_units_p]))
 
-    # D. 툴 제약 (Tool Constraint)
-    # 특정 (제품, 공정)에 할당된 장비 대수는 사용 가능한 툴 수량을 초과할 수 없음
+    # D. 툴 제약 (Tool-Hour Capacity)
+    # 특정 (제품, 공정) 작업의 총 소요 시간(장비들이 나눠서 하는 시간의 합)은 가용한 툴-시간(Tool-Hours)을 초과할 수 없음
+    # 이는 툴 교체 후 반환하여 다른 장비가 순차적으로 사용하는 '반환 및 재사용' 논리를 반영함
     for (p, o) in [(prod, oper) for prod in demands for oper in opers_list]:
-        tool_qty = tools.get((p, o), 99) # 기본값 99 (제한 없음 수준)
-        # 해당 (p, o)에 할당된 장비 가변수(assign_vars)의 합계가 툴 수량 이하여야 함
-        relevant_assigns = [assign_vars[prod, oper, u] for (prod, oper, u) in valid_combinations if prod == p and oper == o]
-        if relevant_assigns:
-            prob += lpSum(relevant_assigns) <= tool_qty
+        tool_qty = tools.get((p, o), 99) # 기본값 99 (제한 없음)
+        
+        # 해당 (p, o)를 수행할 수 있는 모든 (장비, 소요시간) 조합 찾기
+        prod_tasks = []
+        for (prod, oper, model), t in proc_config.items():
+            if prod == p and oper == o:
+                # 이 (p, o)를 처리할 수 있는 모든 유닛들의 수량 변수 확인
+                for u in units:
+                    if model in eqp_models and u in eqp_models[model]:
+                        prod_tasks.append((u, t))
+        
+        if prod_tasks:
+            # 총 소요 시간 (분) = Sum(수량 * 사이클타임)
+            total_tool_time_needed = lpSum([qty_vars[p, o, u] * t for (u, t) in prod_tasks])
+            # 가용 툴-시간 (분) = 툴 개수 * 장비 가용 시간(1440분)
+            prob += total_tool_time_needed <= tool_qty * avail_time
 
     # E. 장비 가용 시간 제약 (Capacity + EQP WIP)
     for u in units:
-        # 해당 장비의 현재 작업 종료 시각(End_Time_Offset)을 고려하여 가용 시간 차감
-        occupied_sec = 0
+        # 해당 장비의 현재 작업 종료 시각(End_Time_Offset - 분 단위)을 고려하여 가용 시간 차감
+        occupied_min = 0
         if u in eqp_wip:
-            occupied_sec = eqp_wip[u].get('End_Time_Offset', 0)
+            occupied_min = eqp_wip[u].get('End_Time_Offset', 0)
         
-        effective_avail_time = avail_time - occupied_sec
+        effective_avail_time = avail_time - occupied_min
         
         assigned_tasks = []
         for (p, o, m), t in proc_config.items():
@@ -117,7 +129,7 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
         
         if assigned_tasks:
             total_unit_time = lpSum([qty_vars[p, o, u] * t for (p, o, t) in assigned_tasks])
-            # (이번에 할당된 작업 시간) <= (실제 사용 가능한 남은 시간)
+            # (이번에 할당된 작업 시간) <= (실제 사용 가능한 남은 분)
             prob += total_unit_time <= effective_avail_time
 
     # 5. 최적화 실행
@@ -137,7 +149,7 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
                 unit_last_state[u] = {
                     'prod': info['Product'], 
                     'oper': info['Operation'], 
-                    'time': now + timedelta(seconds=info['End_Time_Offset'])
+                    'time': now + timedelta(minutes=info['End_Time_Offset'])
                 }
             else:
                 unit_last_state[u] = {'prod': None, 'oper': None, 'time': now}
@@ -149,25 +161,25 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
                 unit_time = proc_config[(p, o, model_name)]
                 
                 last_info = unit_last_state[u]
-                co_sec = get_changeover_time(last_info['prod'], last_info['oper'], p, o)
+                co_min = get_changeover_time(last_info['prod'], last_info['oper'], p, o)
                 
-                if co_sec > 0:
+                if co_min > 0:
                     co_start = last_info['time']
-                    co_end = co_start + timedelta(seconds=co_sec)
+                    co_end = co_start + timedelta(minutes=co_min)
                     results.append({
                         'Unit': u, 'Product': 'CHANGEOVER', 'Operation': 'SETUP',
-                        'Quantity': 0, 'Time_Spent_Sec': co_sec,
+                        'Quantity': 0, 'Time_Spent_Min': co_min,
                         'Start_Time': co_start, 'End_Time': co_end, 'Type': 'Setup'
                     })
                     last_info['time'] = co_end
                 
                 prod_start = last_info['time']
-                spent_time_sec = q * unit_time
-                prod_end = prod_start + timedelta(seconds=spent_time_sec)
+                spent_time_min = q * unit_time
+                prod_end = prod_start + timedelta(minutes=spent_time_min)
                 
                 results.append({
                     'Unit': u, 'Product': p, 'Operation': o,
-                    'Quantity': q, 'Time_Spent_Sec': spent_time_sec,
+                    'Quantity': q, 'Time_Spent_Min': spent_time_min,
                     'Start_Time': prod_start, 'End_Time': prod_end, 'Type': 'Production'
                 })
                 unit_last_state[u] = {'prod': p, 'oper': o, 'time': prod_end}
@@ -181,7 +193,7 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
         df_res = pd.DataFrame(results)
         max_workload = 0
         if not df_res.empty:
-            max_workload = df_res.groupby('Unit')['Time_Spent_Sec'].sum().max()
+            max_workload = df_res.groupby('Unit')['Time_Spent_Min'].sum().max()
         
         return df_res, max_workload, pd.DataFrame(unmet_results)
     else:

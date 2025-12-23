@@ -32,7 +32,7 @@ def main():
     )
     
     if df_results is not None:
-        print(f"Success! Bottleneck Time: {bottleneck_time:.2f}s")
+        print(f"Success! Bottleneck Workload: {bottleneck_time:.1f} min")
         print("\n--- Detailed Allocation Result ---")
         print(df_results[['Unit', 'Product', 'Operation', 'Quantity', 'Type']])
         

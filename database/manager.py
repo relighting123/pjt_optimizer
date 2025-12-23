@@ -57,29 +57,27 @@ class OracleManager:
                 eqp_df = pd.read_sql(eqp_query, conn)
                 equipment_models = eqp_df.groupby('MODEL_ID')['UNIT_ID'].apply(list).to_dict()
 
-                # 3. 공정 설정
+                # 3. 공정 설정 (초 -> 분 변환)
                 proc_query = "SELECT PRODUCT_ID, OPER_ID, MODEL_ID, CYCLE_TIME FROM TB_PROCESS_STANDARD"
                 proc_df = pd.read_sql(proc_query, conn)
-                process_config = {(row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID']): row['CYCLE_TIME'] for _, row in proc_df.iterrows()}
+                process_config = {(row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID']): row['CYCLE_TIME'] / 60.0 for _, row in proc_df.iterrows()}
 
                 # 4. 재공량 (Input WIP)
                 wip_query = "SELECT PRODUCT_ID, OPER_ID, WIP_QTY FROM TB_WIP_STATUS"
                 wip_df = pd.read_sql(wip_query, conn)
                 wip = {(row['PRODUCT_ID'], row['OPER_ID']): row['WIP_QTY'] for _, row in wip_df.iterrows()}
 
-                # 5. 장비별 현재 작업 재공 (Equipment WIP)
-                # 현재 작업 중인 제품, 공정, 종료 예정 시각
+                # 5. 장비별 현재 작업 재공 (Equipment WIP) - 초 -> 분 변환
                 eqw_query = "SELECT EQP_ID, PROD_ID, OPER_ID, END_TIME FROM TB_EQP_WIP"
                 eqw_df = pd.read_sql(eqw_query, conn)
-                # 간단화를 위해 END_TIME과 현재 시각의 차이를 초 단위로 계산하여 저장한다고 가정
                 eqp_wip = {}
                 now = datetime.now()
                 for _, row in eqw_df.iterrows():
-                    offset = (row['END_TIME'] - now).total_seconds()
+                    offset_min = (row['END_TIME'] - now).total_seconds() / 60.0
                     eqp_wip[row['EQP_ID']] = {
                         'Product': row['PROD_ID'],
                         'Operation': row['OPER_ID'],
-                        'End_Time_Offset': max(0, offset)
+                        'End_Time_Offset': max(0, offset_min)
                     }
 
                 # 6. 연간/공정별 툴 수량 (Tool Constraints)

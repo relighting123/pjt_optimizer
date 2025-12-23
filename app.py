@@ -82,8 +82,8 @@ if st.button("🚀 Run Optimizer"):
         
         # 메트릭 표시
         col1, col2, col3 = st.columns(3)
-        col1.metric("Bottleneck Time", f"{bottleneck_time:.0f}s")
-        col2.metric("Line Efficiency", f"{(bottleneck_time/data_config.AVAILABLE_TIME)*100:.1f}%")
+        col1.metric("Bottleneck Workload", f"{bottleneck_time:.1f} min")
+        col2.metric("24h Utilization", f"{(bottleneck_time/data_config.AVAILABLE_TIME)*100:.1f}%")
         col3.metric("Total Tasks", len(df_results))
         
         # 3. 간트 차트 (Gantt Chart)
@@ -99,9 +99,9 @@ if st.button("🚀 Run Optimizer"):
             x_end="End_Time", 
             y="Unit", 
             color="Product",
-            hover_data=["Operation", "Quantity", "Time_Spent_Sec"],
+            hover_data=["Operation", "Quantity", "Time_Spent_Min"],
             text="Label",
-            title="Equipment Schedule Gantt Chart"
+            title="Equipment Schedule Gantt Chart (Unit: Minutes)"
         )
         fig.update_yaxes(autorange="reversed") # 유닛 순서 유지
         fig.update_layout(showlegend=True)
@@ -120,8 +120,8 @@ if st.button("🚀 Run Optimizer"):
             
         # 6. 유닛별 요약
         st.header("📊 Unit Workload Summary")
-        unit_summary = df_results.groupby('Unit')['Time_Spent_Sec'].sum().reset_index()
-        fig_bar = px.bar(unit_summary, x='Unit', y='Time_Spent_Sec', title="Workload per Unit (Seconds)")
+        unit_summary = df_results.groupby('Unit')['Time_Spent_Min'].sum().reset_index()
+        fig_bar = px.bar(unit_summary, x='Unit', y='Time_Spent_Min', title="Workload per Unit (Minutes)")
         st.plotly_chart(fig_bar, use_container_width=True)
 
         # 7. Oracle DB 적재 섹션
