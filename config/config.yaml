@@ -1,0 +1,16 @@
+# Oracle Database Connection Settings
+database:
+  user: "ADMIN"
+  password: "YOUR_PASSWORD"
+  dsn: "localhost:1521/xe"
+
+# Optimization Settings
+optimization:
+  penalty_unmet: 1000000
+  penalty_assign: 1000
+  timeout_sec: 600       # 개별 작업 타임아웃 (10분)
+
+# API Queue Settings
+api:
+  workers: 2             # 동시 처리 스레드 수
+  max_queue_size: 50     # 최대 대기 큐 크기

@@ -1,0 +1,8 @@
+pulp
+pandas
+streamlit
+plotly
+oracledb
+PyYAML
+fastapi
+uvicorn
