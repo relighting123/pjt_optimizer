@@ -73,19 +73,22 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
         prob += lpSum([qty_vars[p, last_oper, u] for u in relevant_units]) + wip_val + unmet_vars[p, last_oper] >= demand
 
     # C. 공정 수순 흐름 제약 (Flow Conservation + WIP)
-    # 현재 공정 생산량 + 현재 공정 재공량 >= 다음 공정 생산량
+    # 각 공정의 생산량은 (해당 공정 시작 전 대기 재공 + 전 공정 생산량)을 초과할 수 없음
     for p in demands:
-        for i in range(len(opers_list) - 1):
-            curr_op = opers_list[i]
-            next_op = opers_list[i+1]
+        for i, curr_op in enumerate(opers_list):
+            curr_units_p = [u for (prod, oper, u) in qty_vars if prod == p and oper == curr_op]
+            wip_val = wip.get((p, curr_op), 0) # 현재 공정을 진행하기 위해 대기 중인 재공
             
-            curr_units = [u for (prod, oper, u) in qty_vars if prod == p and oper == curr_op]
-            next_units = [u for (prod, oper, u) in qty_vars if prod == p and oper == next_op]
-            
-            wip_val = wip.get((p, curr_op), 0)
-            
-            # (현재 공정 생산량 합 + 현재 공정 재공량) >= 다음 공정 생산량 합
-            prob += lpSum([qty_vars[p, curr_op, u] for u in curr_units]) + wip_val >= lpSum([qty_vars[p, next_op, u] for u in next_units])
+            if i == 0:
+                # 첫 공정: 투입 가능한 재공(원소재 등)만큼만 생산 가능
+                prob += lpSum([qty_vars[p, curr_op, u] for u in curr_units_p]) <= wip_val
+            else:
+                # 이후 공정: (해당 공정 대기 재공 + 전 공정에서 넘어온 생산량)만큼 생산 가능
+                prev_op = opers_list[i-1]
+                prev_units_p = [u for (prod, oper, u) in qty_vars if prod == p and oper == prev_op]
+                
+                prob += (lpSum([qty_vars[p, curr_op, u] for u in curr_units_p]) <= 
+                         wip_val + lpSum([qty_vars[p, prev_op, u] for u in prev_units_p]))
 
     for u in units:
         assigned_tasks = []
