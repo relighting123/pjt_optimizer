@@ -11,7 +11,7 @@ def main():
     
     # 2. 실데이터 가져오기 시도
     print("[1/3] Fetching real data from Oracle...")
-    demands, eqp_models, proc_config = mgr.fetch_inputs()
+    demands, eqp_models, proc_config, wip_db = mgr.fetch_inputs()
     
     # DB 데이터가 없을 경우 샘플 데이터 사용 유도
     if not demands:

@@ -81,21 +81,19 @@ class OracleManager:
                 equipment_models = eqp_df.groupby('MODEL_ID')['UNIT_ID'].apply(list).to_dict()
 
                 # 3. 공정 시간 및 장비 모델 혼용 정보 (Process Config)
-                # 쿼리 예시: (제품, 공정, 모델)별 Unit Time(초) 정보를 가져옵니다.
-                proc_query = """
-                SELECT PRODUCT_ID, OPER_ID, MODEL_ID, CYCLE_TIME 
-                FROM TB_PROCESS_STANDARD 
-                """
+                proc_query = "SELECT PRODUCT_ID, OPER_ID, MODEL_ID, CYCLE_TIME FROM TB_PROCESS_STANDARD"
                 proc_df = pd.read_sql(proc_query, conn)
-                process_config = {}
-                for _, row in proc_df.iterrows():
-                    key = (row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID'])
-                    process_config[key] = row['CYCLE_TIME']
+                process_config = {(row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID']): row['CYCLE_TIME'] for _, row in proc_df.iterrows()}
+
+                # 4. 재공량 (WIP)
+                # 쿼리 예시: 공정별 대기 수량을 가져옵니다.
+                wip_query = "SELECT PRODUCT_ID, OPER_ID, WIP_QTY FROM TB_WIP_STATUS"
+                wip_df = pd.read_sql(wip_query, conn)
+                wip = {(row['PRODUCT_ID'], row['OPER_ID']): row['WIP_QTY'] for _, row in wip_df.iterrows()}
 
                 print(f"Successfully fetched inputs from Oracle at {datetime.now()}")
-                return demands, equipment_models, process_config
+                return demands, equipment_models, process_config, wip
 
         except Exception as e:
             print(f"Failed to fetch inputs from Oracle: {e}")
-            # 에러 발생 시 None을 반환하여 호출부에서 예외 처리하게 함
-            return None, None, None
+            return None, None, None, None

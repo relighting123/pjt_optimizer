@@ -47,15 +47,15 @@ with st.sidebar:
         # DB에서 데이터 가져오기 시도
         from database.manager import OracleManager
         mgr = OracleManager(db_defaults['user'], db_defaults['password'], db_defaults['dsn'])
-        # 쿼리 수정 후 가져올 수 있도록 구조 유지 (wip는 일단 빈 dict나 샘플 유지)
-        d, e, p = mgr.fetch_inputs()
+        d, e, p, w = mgr.fetch_inputs()
         if d:
             st.success("Successfully loaded data from Oracle!")
             st.subheader("Demands (Oracle)")
             st.json(d)
-            active_demand, active_eqp, active_proc = d, e, p
+            st.subheader("WIP (Oracle)")
+            st.json({str(k): v for k, v in w.items()})
+            active_demand, active_eqp, active_proc, active_wip = d, e, p, w
             active_avail = data_config.AVAILABLE_TIME
-            active_wip = data_config.WIP # 실 DB 연동시 mgr.fetch_wip() 등으로 확장 가능
         else:
             st.error("Failed to load Oracle data. Using sample data instead.")
             active_demand, active_eqp, active_proc = data_config.DEMAND, data_config.EQUIPMENT_MODELS, data_config.PROCESS_CONFIG

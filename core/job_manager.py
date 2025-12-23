@@ -37,9 +37,9 @@ class JobManager:
             
             # 1. DB Fetch
             mgr = OracleManager()
-            demands, eqp_models, proc_config = mgr.fetch_inputs()
+            demands, eqp_models, proc_config, wip_db = mgr.fetch_inputs()
             
-            if not demands:
+            if demands is None:
                 # DB 실패시 샘플 데이터 (테스트용)
                 demands = data_config.DEMAND
                 eqp_models = data_config.EQUIPMENT_MODELS
