@@ -46,7 +46,8 @@ with st.sidebar:
     else:
         # DB에서 데이터 가져오기 시도
         from database.manager import OracleManager
-        mgr = OracleManager(db_defaults['user'], db_defaults['password'], db_defaults['dsn'])
+        # 현재 선택된 모드 혹은 config의 모드 사용
+        mgr = OracleManager()
         d, e, p, w = mgr.fetch_inputs()
         if d:
             st.success("Successfully loaded data from Oracle!")

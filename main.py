@@ -4,16 +4,20 @@ import config.data_config as data_config
 import pandas as pd
 
 def main():
-    print("=== Production Allocation Verification (Sample Data) ===")
+    print("=== Production Allocation Verification ===")
     
-    # [Verification Mode] DB 접근 없이 data_config의 테스트 케이스 사용
-    demands = data_config.DEMAND
-    eqp_models = data_config.EQUIPMENT_MODELS
-    proc_config = data_config.PROCESS_CONFIG
-    wip = data_config.WIP
+    # 1. DB 매니저 초기화 (config.yaml의 system_mode 기준)
+    mgr = OracleManager()
+    
+    # 2. 데이터 가져오기 (local_test면 샘플, 그 외엔 DB)
+    print(f"[1/3] Fetching data (Mode: {mgr.mode})...")
+    demands, eqp_models, proc_config, wip = mgr.fetch_inputs()
+    
+    if demands is None:
+        print("!!! Error: Failed to fetch inputs.")
+        return
+        
     avail_time = data_config.AVAILABLE_TIME
-    
-    print(f"Testing with: {len(demands)} Products, {len(eqp_models)} Models")
     
     # 3. 최적화 실행
     print("[2/3] Solving optimization problem...")
