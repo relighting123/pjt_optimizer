@@ -1,16 +1,30 @@
-# Oracle Database Connection Settings
+# System Mode: production / development / local_test
+system_mode: local_test
+
+# Database Profiles
 database:
-  user: "ADMIN"
-  password: "YOUR_PASSWORD"
-  dsn: "localhost:1521/xe"
+  production:
+    user: "PROD_USER"
+    password: "PROD_PASSWORD"
+    dsn: "PROD_DSN"
+  development:
+    user: "DEV_USER"
+    password: "DEV_PASSWORD"
+    dsn: "DEV_DSN"
 
 # Optimization Settings
 optimization:
   penalty_unmet: 1000000
   penalty_assign: 1000
-  timeout_sec: 600       # 개별 작업 타임아웃 (10분)
+  penalty_qty: 1
+  timeout_sec: 600
 
-# API Queue Settings
+# API & Automation Settings
 api:
-  workers: 2             # 동시 처리 스레드 수
-  max_queue_size: 50     # 최대 대기 큐 크기
+  workers: 2
+  max_queue_size: 50
+  
+# Batch Scheduler Settings
+scheduler:
+  enabled: false
+  interval_min: 60       # 매 60분마다 실행

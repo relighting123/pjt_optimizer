@@ -3,97 +3,89 @@ import pandas as pd
 import yaml
 import os
 from datetime import datetime
+from config import data_config
 
 class OracleManager:
-    def __init__(self, user=None, password=None, dsn=None):
-        # YAML 파일에서 기본값 로드 시도
+    def __init__(self, mode=None):
+        # YAML 파일에서 설정 로드
         config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'config.yaml')
-        file_config = {}
-        if os.path.exists(config_path):
-            with open(config_path, 'r', encoding='utf-8') as f:
-                full_config = yaml.safe_load(f)
-                file_config = full_config.get('database', {})
-
-        self.conn_params = {
-            "user": user or file_config.get('user', 'ADMIN'),
-            "password": password or file_config.get('password', ''),
-            "dsn": dsn or file_config.get('dsn', 'localhost:1521/xe')
-        }
+        with open(config_path, 'r', encoding='utf-8') as f:
+            self.full_config = yaml.safe_load(f)
+        
+        # 시스템 모드 결정 (인자 우선, 없으면 config 파일 기준)
+        self.mode = mode or self.full_config.get('system_mode', 'local_test')
+        
+        # 모드별 DB 프로필 로드 (local_test는 DB 접속 정보 불필요)
+        if self.mode != 'local_test':
+            db_conf = self.full_config.get('database', {}).get(self.mode, {})
+            self.user = db_conf.get('user')
+            self.password = db_conf.get('password')
+            self.dsn = db_conf.get('dsn')
+        else:
+            self.user = self.password = self.dsn = None
 
     def _get_connection(self):
-        return oracledb.connect(**self.conn_params)
-
-    def upload_results(self, df):
-        """
-        데이터 결과 적재: RULE_TIMEKEY, EQP_ID, START_TIME, END_TIME, PROD_ID, OPER_ID
-        """
-        if df.empty:
-            return
-
-        rule_timekey = datetime.now().strftime("%Y%m%d%H%M%S")
-        
-        # 컬럼명 매핑 및 데이터 정리
-        upload_df = pd.DataFrame()
-        upload_df['RULE_TIMEKEY'] = [rule_timekey] * len(df)
-        upload_df['EQP_ID'] = df['Unit']
-        upload_df['START_TIME'] = df['Start_Time'].dt.strftime("%Y-%m-%d %H:%M:%S")
-        upload_df['END_TIME'] = df['End_Time'].dt.strftime("%Y-%m-%d %H:%M:%S")
-        upload_df['PROD_ID'] = df['Product']
-        upload_df['OPER_ID'] = df['Operation']
-
-        try:
-            with self._get_connection() as conn:
-                with conn.cursor() as cursor:
-                    # 예시 테이블: PRODUCTION_RESULTS
-                    sql = """
-                    INSERT INTO PRODUCTION_RESULTS 
-                    (RULE_TIMEKEY, EQP_ID, START_TIME, END_TIME, PROD_ID, OPER_ID) 
-                    VALUES (:1, :2, :3, :4, :5, :6)
-                    """
-                    data = upload_df.values.tolist()
-                    cursor.executemany(sql, data)
-                    conn.commit()
-            print(f"Successfully uploaded {len(upload_df)} rows to Oracle.")
-        except Exception as e:
-            print(f"Failed to upload to Oracle: {e}")
+        if self.mode == 'local_test':
+            return None
+        return oracledb.connect(user=self.user, password=self.password, dsn=self.dsn)
 
     def fetch_inputs(self):
         """
-        Oracle DB에서 기초 데이터를 가져오는 샘플 코드입니다.
-        아래 쿼리와 매핑 로직을 실제 운영 테이블 전문에 맞게 수정하여 사용하세요.
+        시스템 모드에 따라 샘플 데이터(local_test) 또는 실데이터(prod/dev) 반환
         """
+        if self.mode == 'local_test':
+            print(f"[Info] Running in LOCAL_TEST mode. Returning sample data.")
+            return (
+                data_config.DEMAND, 
+                data_config.EQUIPMENT_MODELS, 
+                data_config.PROCESS_CONFIG, 
+                data_config.WIP
+            )
+
         try:
+            print(f"[Info] Fetching inputs from Oracle ({self.mode} DB)...")
             with self._get_connection() as conn:
-                # 1. 제품별 계획량 (Demand)
-                # 쿼리 예시: 제품코드와 수량을 가져옵니다.
-                demand_query = """
-                SELECT PRODUCT_ID, DEMAND_QTY 
-                FROM TB_PRODUCTION_PLAN 
-                WHERE PLAN_DATE = TO_CHAR(SYSDATE, 'YYYYMMDD')
-                """
+                # 1. 수요 데이터
+                demand_query = "SELECT PRODUCT_ID, DEMAND_QTY FROM TB_PRODUCTION_PLAN"
                 demand_df = pd.read_sql(demand_query, conn)
                 demands = dict(zip(demand_df['PRODUCT_ID'], demand_df['DEMAND_QTY']))
 
-                # 2. 장비 모델 및 호기 구성 (Equipment)
-                # 쿼리 예시: 모델별로 속한 장비 호기 리스트를 가져옵니다.
-                eqp_query = "SELECT MODEL_ID, UNIT_ID FROM TB_EQUIPMENT_MASTER WHERE USE_YN = 'Y'"
+                # 2. 장비 데이터
+                eqp_query = "SELECT MODEL_ID, UNIT_ID FROM TB_EQUIPMENT_MASTER"
                 eqp_df = pd.read_sql(eqp_query, conn)
                 equipment_models = eqp_df.groupby('MODEL_ID')['UNIT_ID'].apply(list).to_dict()
 
-                # 3. 공정 시간 및 장비 모델 혼용 정보 (Process Config)
+                # 3. 공정 설정
                 proc_query = "SELECT PRODUCT_ID, OPER_ID, MODEL_ID, CYCLE_TIME FROM TB_PROCESS_STANDARD"
                 proc_df = pd.read_sql(proc_query, conn)
                 process_config = {(row['PRODUCT_ID'], row['OPER_ID'], row['MODEL_ID']): row['CYCLE_TIME'] for _, row in proc_df.iterrows()}
 
-                # 4. 재공량 (WIP)
-                # 쿼리 예시: 공정별 대기 수량을 가져옵니다.
+                # 4. 재공량
                 wip_query = "SELECT PRODUCT_ID, OPER_ID, WIP_QTY FROM TB_WIP_STATUS"
                 wip_df = pd.read_sql(wip_query, conn)
                 wip = {(row['PRODUCT_ID'], row['OPER_ID']): row['WIP_QTY'] for _, row in wip_df.iterrows()}
 
-                print(f"Successfully fetched inputs from Oracle at {datetime.now()}")
                 return demands, equipment_models, process_config, wip
 
         except Exception as e:
-            print(f"Failed to fetch inputs from Oracle: {e}")
+            print(f"Failed to fetch inputs from Oracle ({self.mode}): {e}")
             return None, None, None, None
+
+    def upload_results(self, df):
+        if self.mode == 'local_test' or df is None or df.empty:
+            print(f"[Info] skipping upload (Mode: {self.mode})")
+            return
+
+        rule_timekey = datetime.now().strftime("%Y%m%d%H%M%S")
+        try:
+            with self._get_connection() as conn:
+                with conn.cursor() as cursor:
+                    sql = "INSERT INTO PRODUCTION_RESULTS (RULE_TIMEKEY, EQP_ID, START_TIME, END_TIME, PROD_ID, OPER_ID) VALUES (:1, :2, :3, :4, :5, :6)"
+                    data = []
+                    for _, row in df.iterrows():
+                        data.append((rule_timekey, row['Unit'], row['Start_Time'], row['End_Time'], row['Product'], row['Operation']))
+                    cursor.executemany(sql, data)
+                    conn.commit()
+            print(f"Successfully uploaded {len(df)} rows to Oracle ({self.mode}).")
+        except Exception as e:
+            print(f"Failed to upload to Oracle ({self.mode}): {e}")

@@ -37,6 +37,11 @@ async def get_status(job_id: str):
     
     return status_info
 
+@app.get("/jobs")
+async def get_all_jobs():
+    """모든 작업의 상태 리스트를 반환합니다."""
+    return job_manager.jobs
+
 @app.get("/config")
 async def get_queue_config():
     """현재 큐 및 워커 설정 정보를 확인합니다."""
