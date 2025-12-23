@@ -50,10 +50,16 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
     unmet_vars = LpVariable.dicts("Unmet", [(p, o) for p in demands for o in opers_list], lowBound=0, cat='Continuous')
     
     # 3. 목적 함수 설계
+    # 1순위: 미충족 수요 최소화 (Penalty 1,000,000)
+    # 2순위: 제품/공정 전환 최소화 (할당 개수 1개당 Penalty 1,000)
+    # 3순위: 불필요한 과잉 생산 최소화 (수량 1개당 Penalty 1)
     p_unmet = 1000000
     p_assign = 1000
+    p_qty = 1
+    
     prob += (p_unmet * lpSum([unmet_vars[p, o] for p, o in unmet_vars]) + 
-             p_assign * lpSum([assign_vars[p, o, u] for (p, o, u) in valid_combinations]))
+             p_assign * lpSum([assign_vars[p, o, u] for (p, o, u) in valid_combinations]) +
+             p_qty * lpSum([qty_vars[p, o, u] for (p, o, u) in valid_combinations]))
 
     # 4. 제약 조건 설정
     for (p, o, u) in valid_combinations:
