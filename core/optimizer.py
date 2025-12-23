@@ -53,13 +53,29 @@ def solve_production_allocation(demands=None, eqp_models=None, proc_config=None,
     
     # 3. 목적 함수 설계
     # 1순위: 미충족 수요 최소화 (Penalty 1,000,000)
-    # 2순위: 제품/공정 전환 최소화 (할당 개수 1개당 Penalty 1,000)
-    # 3순위: 불필요한 과잉 생산 최소화 (수량 1개당 Penalty 1)
+    # 2순위: 현재 작업 중인 장비의 작업 연속성 유지 (Penalty 10,000)
+    # 3순위: 제품/공정 전환 최소화 (할당 개수 1개당 Penalty 1,000)
+    # 4순위: 불필요한 과잉 생산 최소화 (수량 1개당 Penalty 1)
     p_unmet = 1000000
+    p_continuation = 10000  # 작업 연속성 페널티 (새로 추가)
     p_assign = 1000
     p_qty = 1
     
+    # 작업 연속성 페널티 계산
+    # 현재 작업 중인 장비가 다른 (제품, 공정)을 할당받으면 페널티 부과
+    continuation_penalty = 0
+    for u in units:
+        if u in eqp_wip:
+            current_prod = eqp_wip[u]['Product']
+            current_oper = eqp_wip[u]['Operation']
+            
+            # 이 장비에 할당 가능한 모든 조합 중, 현재 작업과 다른 것에 페널티
+            for (p, o, unit) in valid_combinations:
+                if unit == u and (p != current_prod or o != current_oper):
+                    continuation_penalty += p_continuation * assign_vars[p, o, unit]
+    
     prob += (p_unmet * lpSum([unmet_vars[p, o] for p, o in unmet_vars]) + 
+             continuation_penalty +
              p_assign * lpSum([assign_vars[p, o, u] for (p, o, u) in valid_combinations]) +
              p_qty * lpSum([qty_vars[p, o, u] for (p, o, u) in valid_combinations]))
 
