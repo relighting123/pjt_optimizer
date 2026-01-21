@@ -6,3 +6,8 @@ oracledb
 PyYAML
 fastapi
 uvicorn
+numpy
+torch
+gymnasium
+stable-baselines3
+tensorboard
